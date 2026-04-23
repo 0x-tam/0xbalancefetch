@@ -1,0 +1,27 @@
+{
+  "name": "0xbalancefetch",
+  "version": "1.0.0",
+  "description": "Historical year-end wallet balance snapshots via GoldRush API",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "snapshot": "ts-node src/index.ts snapshot",
+    "validate": "ts-node src/index.ts validate",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "axios-retry": "^4.4.1",
+    "commander": "^12.1.0",
+    "csv-stringify": "^6.4.6",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

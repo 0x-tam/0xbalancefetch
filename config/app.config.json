@@ -1,0 +1,10 @@
+{
+  "years": [2023, 2024, 2025],
+  "chains": ["ethereum", "arbitrum", "polygon", "gnosis"],
+  "tokens": ["ETH", "USDT", "USDC", "EURe", "xDAI"],
+  "rateLimit": {
+    "minDelayMs": 250,
+    "maxRetries": 4,
+    "backoffBaseMs": 1000
+  }
+}

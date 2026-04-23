@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Safewallet",
+    "address": "0x5322bff39339eda261bf878fa7d92791cc969bb0"
+  },
+  {
+    "name": "SafeWallet 2",
+    "address": "0x2A581895e181A62C12b3150235D88DE73B8D9FF5"
+  },
+  {
+    "name": "Monerium",
+    "address": "0x76a90d3b5050e5a139987f74c72e63c17f5b36e6"
+  },
+  {
+    "name": "Monerium 2",
+    "address": "0x9258d94c334cb1974e16ba02310fd83d47582ab5"
+  },
+  {
+    "name": "Treasury Wallet",
+    "address": "0x2c349022df145c1a2ed895b5577905e6f1bc7881"
+  },
+  {
+    "name": "Multisig Wallet",
+    "address": "0x0d0a6e5ff546d06b43279188dd8112bac6ad424d"
+  }
+]
