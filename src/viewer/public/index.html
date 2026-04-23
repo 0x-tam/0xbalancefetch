@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>0xbalancefetch — Snapshot Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #181c27;
+      --border:    #272c3a;
+      --accent:    #4f8ef7;
+      --accent2:   #34c98b;
+      --warn:      #f7c948;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --row-hover: #1e2333;
+      --tag-bg:    #1e2a3a;
+      --radius:    8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; color: var(--text); }
+    header .badge {
+      font-size: 10px;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 2px 7px;
+      border-radius: 20px;
+    }
+    header .spacer { flex: 1; }
+    header .generated { font-size: 11px; color: var(--muted); }
+
+    nav {
+      display: flex;
+      gap: 2px;
+      padding: 12px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    nav button {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 8px 14px;
+      margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── KPI bar ────────────────────────────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .kpi .value { font-size: 22px; font-weight: 700; color: var(--text); }
+    .kpi .sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Filters ────────────────────────────────────────────────────── */
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .filters select, .filters input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+    .filters select:focus, .filters input:focus { border-color: var(--accent); }
+    .filters label { font-size: 12px; color: var(--muted); align-self: center; }
+
+    /* ── Table ──────────────────────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: auto;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    thead th:hover { color: var(--text); }
+    thead th .sort-icon { margin-left: 4px; opacity: .4; }
+    thead th.sorted .sort-icon { opacity: 1; color: var(--accent); }
+
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody td { padding: 9px 14px; white-space: nowrap; }
+
+    .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
+    .num  { text-align: right; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
+    .muted { color: var(--muted); }
+    .zero  { color: var(--muted); opacity: .5; }
+
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tag-native  { background: #1a2e1a; color: var(--accent2); border: 1px solid #2a4a2a; }
+    .tag-erc20   { background: #1a1e2e; color: #7eb3f7;        border: 1px solid #2a3050; }
+    .tag-eth     { background: #1d1a2e; color: #a78bfa;        border: 1px solid #302050; }
+    .tag-usdc    { background: #0e2038; color: #60a5fa;        border: 1px solid #1a3a60; }
+    .tag-usdt    { background: #0e2e1e; color: #34d399;        border: 1px solid #1a4a30; }
+    .tag-eure    { background: #2e220e; color: var(--warn);    border: 1px solid #4a3a1a; }
+    .tag-xdai    { background: #1e1a0e; color: #fbbf24;        border: 1px solid #3a2e10; }
+    .tag-chain   { background: var(--tag-bg); color: var(--muted); border: 1px solid var(--border); }
+
+    .usd { color: var(--accent2); }
+
+    /* ── Year selector tabs ─────────────────────────────────────────── */
+    .year-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .year-tabs button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 14px;
+      transition: all .15s;
+    }
+    .year-tabs button:hover { color: var(--text); border-color: var(--accent); }
+    .year-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .year-tabs button.all { font-weight: 400; }
+
+    /* ── Summary cards ──────────────────────────────────────────────── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .wallet-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .wallet-card .wname {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+    .wallet-card .waddr {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: monospace;
+      margin-bottom: 10px;
+    }
+    .wallet-card .wtotal {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent2);
+    }
+    .wallet-card .wlabel { font-size: 11px; color: var(--muted); }
+    .wallet-card .wbreakdown {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .wallet-card .wbreakdown .chip {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    /* ── Loading / error ────────────────────────────────────────────── */
+    .message {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--muted);
+    }
+    .message .icon { font-size: 36px; margin-bottom: 12px; }
+    .message h2 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+
+    /* ── Pagination ─────────────────────────────────────────────────── */
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .pagination .pager { display: flex; gap: 4px; }
+    .pagination button {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 10px;
+    }
+    .pagination button:disabled { opacity: .3; cursor: default; }
+    .pagination button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>0xbalancefetch</h1>
+  <span class="badge">snapshot viewer</span>
+  <span class="spacer"></span>
+  <span class="generated" id="gen-time"></span>
+</header>
+
+<nav>
+  <button class="active" data-panel="overview">Overview</button>
+  <button data-panel="details">Detailed Records</button>
+  <button data-panel="wallets">By Wallet</button>
+  <button data-panel="tokens">By Token</button>
+</nav>
+
+<main>
+  <div id="loading" class="message">
+    <div class="icon">⏳</div>
+    <h2>Loading snapshot data…</h2>
+  </div>
+
+  <!-- OVERVIEW ─────────────────────────────────────────────────── -->
+  <div id="panel-overview" class="panel">
+    <div class="year-tabs" id="overview-years"></div>
+    <div class="kpi-row" id="kpi-row"></div>
+    <div class="card-grid" id="wallet-cards"></div>
+  </div>
+
+  <!-- DETAILS ──────────────────────────────────────────────────── -->
+  <div id="panel-details" class="panel">
+    <div class="filters">
+      <label>Year</label>
+      <select id="f-year"><option value="">All years</option></select>
+      <label>Wallet</label>
+      <select id="f-wallet"><option value="">All wallets</option></select>
+      <label>Chain</label>
+      <select id="f-chain"><option value="">All chains</option></select>
+      <label>Token</label>
+      <select id="f-token"><option value="">All tokens</option></select>
+      <label>Hide zeros</label>
+      <input type="checkbox" id="f-zeros" checked />
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-col="year">Year <span class="sort-icon">↕</span></th>
+            <th data-col="walletName">Wallet <span class="sort-icon">↕</span></th>
+            <th data-col="chain">Chain <span class="sort-icon">↕</span></th>
+            <th data-col="tokenSymbol">Token <span class="sort-icon">↕</span></th>
+            <th data-col="tokenType">Type <span class="sort-icon">↕</span></th>
+            <th data-col="balance" class="sorted">Balance <span class="sort-icon">↓</span></th>
+            <th data-col="usdValue">USD Value <span class="sort-icon">↕</span></th>
+            <th>Contract</th>
+            <th data-col="fetchedAt">Fetched <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="detail-tbody"></tbody>
+      </table>
+      <div class="pagination" id="detail-pagination"></div>
+    </div>
+  </div>
+
+  <!-- WALLETS ──────────────────────────────────────────────────── -->
+  <div id="panel-wallets" class="panel">
+    <div class="year-tabs" id="wallet-years"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Wallet</th>
+            <th>Address</th>
+            <th class="num">Total USD Value</th>
+          </tr>
+        </thead>
+        <tbody id="wallet-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TOKENS ───────────────────────────────────────────────────── -->
+  <div id="panel-tokens" class="panel">
+    <div class="year-tabs" id="token-years"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Token</th>
+            <th class="num">Total Balance</th>
+            <th class="num">Total USD Value</th>
+          </tr>
+        </thead>
+        <tbody id="token-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Utils ──────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const fmt = (n, dec = 4) =>
+  n == null || n === '' ? '—'
+  : Number(n) === 0 ? '<span class="zero">0</span>'
+  : Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: dec });
+const fmtUsd = (n) =>
+  n == null || n === '' ? '<span class="muted">—</span>'
+  : `<span class="usd">$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+const abbr = (addr) => addr ? addr.slice(0,6) + '…' + addr.slice(-4) : '';
+const tokenTag = (sym) => {
+  const cls = { ETH:'tag-eth', USDC:'tag-usdc', USDT:'tag-usdt', EURe:'tag-eure', xDAI:'tag-xdai' }[sym] || 'tag-erc20';
+  return `<span class="tag ${cls}">${sym}</span>`;
+};
+const chainTag = (c) => `<span class="tag tag-chain">${c}</span>`;
+const typeTag  = (t) => `<span class="tag ${t==='native'?'tag-native':'tag-erc20'}">${t}</span>`;
+
+// ── State ──────────────────────────────────────────────────────────────
+let DATA = null;
+let detailSort = { col: 'balance', dir: -1 };
+let detailPage = 0;
+const PAGE_SIZE = 50;
+
+// ── Navigation ─────────────────────────────────────────────────────────
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('panel-' + btn.dataset.panel).classList.add('active');
+    if (DATA) renderPanel(btn.dataset.panel);
+  });
+});
+
+// ── Load ───────────────────────────────────────────────────────────────
+fetch('/api/snapshot')
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(data => {
+    DATA = data;
+    $('loading').style.display = 'none';
+    $('gen-time').textContent = 'Generated ' + new Date(data.generatedAt).toLocaleString();
+    populateFilters();
+    $('panel-overview').classList.add('active');
+    renderPanel('overview');
+  })
+  .catch(err => {
+    $('loading').innerHTML = `
+      <div class="icon">⚠️</div>
+      <h2>No data available</h2>
+      <p>Run <code>npm run seed</code> or <code>npm run snapshot</code> to generate snapshot data.</p>
+      <p style="margin-top:8px;color:#4f8ef7">${err}</p>`;
+  });
+
+// ── Filters ────────────────────────────────────────────────────────────
+function populateFilters() {
+  const years   = [...new Set(DATA.records.map(r => r.year))].sort();
+  const wallets = [...new Set(DATA.records.map(r => r.walletName))].sort();
+  const chains  = [...new Set(DATA.records.map(r => r.chain))].sort();
+  const tokens  = [...new Set(DATA.records.map(r => r.tokenSymbol))].sort();
+  const fill = (sel, opts) => opts.forEach(o => {
+    const el = document.createElement('option'); el.value = o; el.textContent = o; sel.append(el);
+  });
+  fill($('f-year'),   years);
+  fill($('f-wallet'), wallets);
+  fill($('f-chain'),  chains);
+  fill($('f-token'),  tokens);
+  ['f-year','f-wallet','f-chain','f-token','f-zeros'].forEach(id =>
+    $(id).addEventListener('change', () => { detailPage = 0; renderDetails(); })
+  );
+}
+
+// ── Render router ──────────────────────────────────────────────────────
+function renderPanel(name) {
+  if (name === 'overview') renderOverview();
+  if (name === 'details')  renderDetails();
+  if (name === 'wallets')  renderWallets();
+  if (name === 'tokens')   renderTokens();
+}
+
+// ── Year-tab helper ────────────────────────────────────────────────────
+function makeYearTabs(containerId, stateKey, onChange) {
+  const years = [...new Set(DATA.records.map(r => r.year))].sort();
+  const el = $(containerId);
+  el.innerHTML = '';
+  const all = document.createElement('button');
+  all.textContent = 'All years'; all.className = 'all';
+  if (!window[stateKey]) { all.classList.add('active'); window[stateKey] = null; }
+  all.addEventListener('click', () => {
+    window[stateKey] = null;
+    el.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    all.classList.add('active');
+    onChange(null);
+  });
+  el.append(all);
+  years.forEach(y => {
+    const btn = document.createElement('button');
+    btn.textContent = y;
+    if (window[stateKey] === y) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      window[stateKey] = y;
+      el.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onChange(y);
+    });
+    el.append(btn);
+  });
+}
+
+// ── Overview ───────────────────────────────────────────────────────────
+function renderOverview(year) {
+  makeYearTabs('overview-years', '__ovYear', y => renderOverview(y));
+  year = year !== undefined ? year : window.__ovYear;
+  const recs = year ? DATA.records.filter(r => r.year === year) : DATA.records;
+  const wTotals = year ? DATA.walletTotals.filter(t => t.year === year) : DATA.walletTotals;
+
+  // KPIs
+  const totalUsd = wTotals.reduce((s, t) => s + t.totalUsdValue, 0);
+  const years = [...new Set(recs.map(r => r.year))];
+  const wallets = [...new Set(recs.map(r => r.walletName))];
+  const nonZero = recs.filter(r => r.balance > 0).length;
+  $('kpi-row').innerHTML = `
+    <div class="kpi"><div class="label">Total Portfolio</div><div class="value">${fmtUsd(totalUsd)}</div><div class="sub">${year || years.join(', ')}</div></div>
+    <div class="kpi"><div class="label">Wallets</div><div class="value">${wallets.length}</div><div class="sub">tracked</div></div>
+    <div class="kpi"><div class="label">Non-zero Positions</div><div class="value">${nonZero}</div><div class="sub">of ${recs.length} records</div></div>
+    <div class="kpi"><div class="label">Chains</div><div class="value">${[...new Set(recs.map(r=>r.chain))].length}</div><div class="sub">${[...new Set(recs.map(r=>r.chain))].join(', ')}</div></div>
+  `;
+
+  // Wallet cards
+  const cards = $('wallet-cards');
+  cards.innerHTML = '';
+  const grouped = {};
+  for (const t of wTotals) {
+    if (!grouped[t.walletAddress]) grouped[t.walletAddress] = { name: t.walletName, addr: t.walletAddress, years: {} };
+    grouped[t.walletAddress].years[t.year] = t.totalUsdValue;
+  }
+  for (const [addr, info] of Object.entries(grouped)) {
+    const totalForWallet = Object.values(info.years).reduce((s, v) => s + v, 0);
+    const displayTotal = year ? (info.years[year] || 0) : totalForWallet;
+    const yearBreakdown = Object.entries(info.years)
+      .filter(([y]) => !year || Number(y) === year)
+      .map(([y, v]) => `<span class="chip">${y}: $${Number(v).toLocaleString('en-US',{maximumFractionDigits:0})}</span>`)
+      .join('');
+    const card = document.createElement('div');
+    card.className = 'wallet-card';
+    card.innerHTML = `
+      <div class="wname">${info.name}</div>
+      <div class="waddr">${addr}</div>
+      <div class="wlabel">Total USD Value</div>
+      <div class="wtotal">$${Number(displayTotal).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      <div class="wbreakdown">${yearBreakdown}</div>
+    `;
+    cards.append(card);
+  }
+}
+
+// ── Detailed records ───────────────────────────────────────────────────
+function filteredDetails() {
+  const yr  = $('f-year').value;
+  const wl  = $('f-wallet').value;
+  const ch  = $('f-chain').value;
+  const tk  = $('f-token').value;
+  const hz  = $('f-zeros').checked;
+  return DATA.records.filter(r =>
+    (!yr || String(r.year) === yr) &&
+    (!wl || r.walletName === wl) &&
+    (!ch || r.chain === ch) &&
+    (!tk || r.tokenSymbol === tk) &&
+    (!hz || r.balance > 0)
+  ).sort((a, b) => {
+    const av = a[detailSort.col] ?? 0;
+    const bv = b[detailSort.col] ?? 0;
+    return av < bv ? detailSort.dir : av > bv ? -detailSort.dir : 0;
+  });
+}
+
+function renderDetails() {
+  const rows = filteredDetails();
+  const start = detailPage * PAGE_SIZE;
+  const page  = rows.slice(start, start + PAGE_SIZE);
+  const tbody = $('detail-tbody');
+  tbody.innerHTML = page.map(r => `
+    <tr>
+      <td>${r.year}</td>
+      <td>${r.walletName}</td>
+      <td>${chainTag(r.chain)}</td>
+      <td>${tokenTag(r.tokenSymbol)}</td>
+      <td>${typeTag(r.tokenType)}</td>
+      <td class="num">${r.balance > 0 ? fmt(r.balance) : '<span class="zero">0</span>'}</td>
+      <td class="num">${r.usdValue > 0 ? fmtUsd(r.usdValue) : '<span class="muted">—</span>'}</td>
+      <td class="mono muted" title="${r.tokenContract||''}">${r.tokenContract ? abbr(r.tokenContract) : '<span class="muted">native</span>'}</td>
+      <td class="muted">${r.fetchedAt ? r.fetchedAt.slice(0,10) : ''}</td>
+    </tr>`).join('');
+
+  const pages = Math.ceil(rows.length / PAGE_SIZE);
+  $('detail-pagination').innerHTML = `
+    <span>${rows.length} record${rows.length!==1?'s':''} (page ${pages?detailPage+1:0} of ${pages})</span>
+    <div class="pager">
+      <button onclick="detailPage=0;renderDetails()" ${detailPage===0?'disabled':''}>«</button>
+      <button onclick="detailPage--;renderDetails()" ${detailPage===0?'disabled':''}>‹</button>
+      <button onclick="detailPage++;renderDetails()" ${detailPage>=pages-1?'disabled':''}>›</button>
+      <button onclick="detailPage=${pages-1};renderDetails()" ${detailPage>=pages-1?'disabled':''}>»</button>
+    </div>`;
+}
+
+// Header sort
+document.querySelectorAll('#panel-details thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    document.querySelectorAll('#panel-details thead th').forEach(t => {
+      t.classList.remove('sorted');
+      const ico = t.querySelector('.sort-icon'); if(ico) ico.textContent = '↕';
+    });
+    if (detailSort.col === th.dataset.col) detailSort.dir *= -1;
+    else { detailSort.col = th.dataset.col; detailSort.dir = -1; }
+    th.classList.add('sorted');
+    th.querySelector('.sort-icon').textContent = detailSort.dir === -1 ? '↓' : '↑';
+    detailPage = 0;
+    renderDetails();
+  });
+});
+
+// ── Wallet totals ──────────────────────────────────────────────────────
+function renderWallets(year) {
+  makeYearTabs('wallet-years', '__wYear', y => renderWallets(y));
+  year = year !== undefined ? year : window.__wYear;
+  const totals = year
+    ? DATA.walletTotals.filter(t => t.year === year)
+    : DATA.walletTotals;
+  $('wallet-tbody').innerHTML = totals.map(t => `
+    <tr>
+      <td>${t.year}</td>
+      <td><strong>${t.walletName}</strong></td>
+      <td class="mono muted" title="${t.walletAddress}">${abbr(t.walletAddress)}</td>
+      <td class="num">${fmtUsd(t.totalUsdValue)}</td>
+    </tr>`).join('');
+}
+
+// ── Token totals ───────────────────────────────────────────────────────
+function renderTokens(year) {
+  makeYearTabs('token-years', '__tYear', y => renderTokens(y));
+  year = year !== undefined ? year : window.__tYear;
+  const totals = year
+    ? DATA.tokenTotals.filter(t => t.year === year)
+    : DATA.tokenTotals;
+  $('token-tbody').innerHTML = totals.map(t => `
+    <tr>
+      <td>${t.year}</td>
+      <td>${tokenTag(t.tokenSymbol)}</td>
+      <td class="num">${fmt(t.totalBalance)}</td>
+      <td class="num">${fmtUsd(t.totalUsdValue)}</td>
+    </tr>`).join('');
+}
+</script>
+</body>
+</html>

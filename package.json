@@ -7,16 +7,20 @@
     "build": "tsc",
     "snapshot": "ts-node src/index.ts snapshot",
     "validate": "ts-node src/index.ts validate",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "view": "ts-node src/viewer/server.ts",
+    "seed": "ts-node src/viewer/seed.ts"
   },
   "dependencies": {
     "axios": "^1.7.2",
     "axios-retry": "^4.4.1",
     "commander": "^12.1.0",
     "csv-stringify": "^6.4.6",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^20.14.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
